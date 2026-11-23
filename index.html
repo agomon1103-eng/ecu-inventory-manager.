@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#17221d">
+<title>ECU Inventory Manager 2.0</title>
+<style>
+:root{--bg:#f4f6f4;--panel:#fff;--ink:#18231d;--muted:#65736a;--line:#dce4dd;--green:#246b45;--green2:#e8f3eb;--red:#a33c35;--amber:#8a5b12}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:#17221c;color:white;padding:20px max(18px,calc((100% - 1200px)/2));}
+header h1{margin:0;font-size:22px}header p{margin:4px 0 0;color:#c5d1c8}
+main{max-width:1200px;margin:22px auto;padding:0 16px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(310px,1fr);gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 2px 8px #17221c08}
+h2{font-size:17px;margin:0 0 12px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.space{justify-content:space-between}
+button,.filebtn{border:0;border-radius:9px;padding:10px 14px;background:var(--green);color:white;font-weight:650;cursor:pointer;font-size:14px}
+button.secondary,.filebtn.secondary{background:#edf2ee;color:#26382c;border:1px solid var(--line)}
+button.warn{background:#fff3dc;color:#714d0b;border:1px solid #ead6ad}button.danger{background:#fff0ef;color:var(--red);border:1px solid #edcfcc}
+button:disabled{opacity:.42;cursor:not-allowed}input,textarea{width:100%;padding:10px 11px;border:1px solid #cbd6ce;border-radius:8px;background:white;color:var(--ink);font:inherit}
+label{display:block;font-weight:650;font-size:13px;margin:12px 0 5px}.hint{font-size:12px;color:var(--muted);margin-top:5px}
+#preview{width:100%;height:min(58vh,560px);object-fit:contain;background:#edf0ed;border:1px solid var(--line);border-radius:10px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.stat{background:#f5f8f5;border:1px solid var(--line);border-radius:10px;padding:10px}.stat b{display:block;font-size:20px}.stat span{font-size:11px;color:var(--muted)}
+.fieldgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.status{padding:10px 12px;border-radius:9px;background:#f0f4f0;color:#34483a;font-size:13px;margin-top:12px;min-height:40px}
+.progress{height:8px;background:#e8eee9;border-radius:99px;overflow:hidden;margin-top:8px}.progress>div{height:100%;background:var(--green);width:0}
+.queue{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:9px}.qitem{padding:8px 10px;border-bottom:1px solid #edf1ed;display:flex;justify-content:space-between;gap:8px;font-size:12px;cursor:pointer}.qitem.active{background:var(--green2)}.tag{font-size:11px;color:var(--muted)}.ok{color:var(--green);font-weight:700}.skip{color:var(--amber);font-weight:700}
+.small{font-size:12px;color:var(--muted)}.wide{width:100%}
+@media(max-width:850px){main{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header><h1>ECU Inventory Manager 2.0</h1><p>Clasificación de computadoras automotrices · respaldo automático · destino directo</p></header>
+<main>
+<section class="panel">
+ <div class="row space"><h2>1. Lote de WhatsApp</h2><span id="lotInfo" class="tag">Sin lote cargado</span></div>
+ <div class="row">
+  <label class="filebtn">Importar ZIP WhatsApp<input id="zipInput" type="file" accept=".zip" hidden></label>
+  <label class="filebtn secondary">Seleccionar fotos<input id="photosInput" type="file" accept="image/*" multiple hidden></label>
+  <button id="restoreBtn" class="secondary">Recuperar respaldo</button>
+ </div>
+ <p class="hint">El ZIP puede incluir el TXT exportado y la carpeta de medios. La aplicación conserva el orden de los archivos de imagen; si hay TXT, intenta seguir el orden de los adjuntos.</p>
+ <div class="stats">
+  <div class="stat"><b id="total">0</b><span>TOTAL</span></div><div class="stat"><b id="savedCount">0</b><span>GUARDADAS</span></div>
+  <div class="stat"><b id="skippedCount">0</b><span>OMITIDAS</span></div><div class="stat"><b id="pendingCount">0</b><span>PENDIENTES</span></div>
+ </div>
+ <div class="progress"><div id="progressBar"></div></div><p class="small" id="progressText">0 de 0 revisadas</p>
+ <div style="margin:12px 0"><img id="preview" alt="Vista previa de la computadora"></div>
+ <div class="row space"><div><b id="position">Fotografía 0 de 0</b><div class="small" id="originalName">Sin fotografía seleccionada</div></div><div class="row"><button id="prev" class="secondary">Anterior</button><button id="next" class="secondary">Siguiente</button></div></div>
+ <div class="row" style="margin-top:12px"><button id="skip" class="warn">Omitir esta fotografía</button><button id="undoSkip" class="secondary">Quitar omisión</button></div>
+ <div class="status" id="status" role="status" aria-live="polite">Importa el ZIP o selecciona fotografías para comenzar.</div>
+</section>
+<aside class="panel">
+ <h2>2. Identificación de la computadora</h2>
+ <label>Referencias y códigos detectados / leídos</label><textarea id="refs" rows="4" placeholder="Números de parte, códigos Bosch, Continental, OEM..."></textarea>
+ <div class="row" style="margin-top:7px"><button id="ocr" class="secondary">Leer texto de la imagen (OCR)</button></div>
+ <label>Marca del vehículo y modelo exacto</label><input id="model" placeholder="Ej. CHEVROLET SPARK">
+ <div class="fieldgrid"><div><label>Año inicial</label><input id="yearStart" inputmode="numeric" maxlength="4" placeholder="2006"></div><div><label>Año final</label><input id="yearEnd" inputmode="numeric" maxlength="4" placeholder="2007"></div></div>
+ <label>Notas / motor / transmisión / certeza</label><textarea id="notes" rows="3" placeholder="Detalles para verificar..."></textarea>
+ <label>Nombre que se guardará</label><input id="filename" readonly placeholder="Se genera al completar modelo y años">
+ <div class="row" style="margin-top:12px"><button id="saveNext" class="wide">Guardar y siguiente</button><button id="saveOnly" class="secondary">Guardar</button></div>
+ <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+ <h2>3. Carpeta destino</h2>
+ <p class="small">Selecciona directamente la carpeta final. No se crearán carpetas dentro de ella.</p>
+ <div class="row"><button id="pickFolder">Seleccionar carpeta destino</button><button id="reconnect" class="secondary">Reconectar permiso</button></div>
+ <p id="folderStatus" class="status">Destino no seleccionado</p>
+ <div class="row" style="margin-top:10px"><button id="exportZip" class="secondary">Exportar ZIP guardadas</button><button id="exportCsv" class="secondary">Exportar CSV</button></div>
+ <p class="hint">Si Chrome solicita permiso nuevamente, pulsa Reconectar permiso. El destino se recuerda cuando el navegador conserva el permiso; si no, solo será necesario volver a autorizarlo, no volver a importar las fotos.</p>
+ <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+ <div class="row space"><h2>4. Lista de fotografías</h2><button id="clear" class="danger">Borrar sesión</button></div>
+ <div id="queue" class="queue"></div>
+</aside>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+(()=>{'use strict';
+const DB='ecu-inventory-v2',STORE='state',KEY='active',HANDLE='destination';
+let dbp,photos=[],idx=0,saved=new Map(),skipped=new Set(),dirHandle=null,objectUrl=null,zipName='';
+const $=id=>document.getElementById(id);
+const clean=s=>(s||'').trim().replace(/[<>:"/\\\\|?*\\x00-\\x1F]/g,' ').replace(/\\s+/g,' ').replace(/[. ]+$/,'');
+const say=t=>$('status').textContent=t;
+function db(){if(!dbp)dbp=new Promise((res,rej)=>{let r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{r.result.createObjectStore(STORE)};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});return dbp}
+async function dbGet(k){let d=await db();return new Promise((res,rej)=>{let t=d.transaction(STORE,'readonly'),r=t.objectStore(STORE).get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function dbPut(k,v){let d=await db();return new Promise((res,rej)=>{let t=d.transaction(STORE,'readwrite');t.objectStore(STORE).put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})}
+async function persist(){await dbPut(KEY,{photos,idx,saved:[...saved],skipped:[...skipped],zipName,updated:Date.now()})}
+async function persistHandle(h){await dbPut(HANDLE,h)}
+async function restore(){
+ try{let d=await dbGet(KEY);if(d){photos=d.photos||[];idx=Math.min(d.idx||0,Math.max(0,photos.length-1));saved=new Map(d.saved||[]);skipped=new Set(d.skipped||[]);zipName=d.zipName||'';render();say('Respaldo recuperado: '+photos.length+' fotos, '+saved.size+' guardadas y '+skipped.size+' omitidas.');}
+ dirHandle=await dbGet(HANDLE)||null;updateFolderLabel();
+ }catch(e){say('No se pudo recuperar el respaldo: '+e.message)}
+}
+function updateFolderLabel(){ $('folderStatus').textContent=dirHandle?'Carpeta recordada: '+dirHandle.name+' · verifica permiso con Reconectar':'Destino no seleccionado';}
+function fileKey(f,i){return f.name+'|'+f.size+'|'+f.lastModified+'|'+i}
+function imageFiles(files){return [...files].filter(f=>f.type.startsWith('image/')||/\\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name))}
+function setPhotos(list,name){photos=list.map((p,i)=>({...p,key:p.key||fileKey(p.file||p,i)}));idx=0;saved.clear();skipped.clear();zipName=name||'';persist().then(()=>{render();say('Lote cargado y respaldado. '+photos.length+' fotografías.')}).catch(e=>say('No se pudo respaldar el lote: '+e.message))}
+async function importZip(file){if(!window.JSZip)throw Error('No se cargó JSZip. Comprueba Internet y recarga.');let z=await JSZip.loadAsync(file),entries=Object.values(z.files).filter(x=>!x.dir);let txt=entries.find(x=>/\\.txt$/i.test(x.name)&&/chat|_chat|whatsapp/i.test(x.name))||entries.find(x=>/\\.txt$/i.test(x.name));let order=[];if(txt){let t=await txt.async('string');let re=/([^\\r\\n]*?)([^\\r\\n]*\\.(?:jpe?g|png|webp|gif|bmp))\\s*\\(archivo adjunto\\)/gi,m;while((m=re.exec(t)))order.push(m[2].split('/').pop())}
+ let imgs=entries.filter(x=>/\\.(jpe?g|png|webp|gif|bmp)$/i.test(x.name));let ordered=[];for(let n of order){let found=imgs.find(x=>x.name.endsWith('/'+n)||x.name===n);if(found&&!ordered.includes(found))ordered.push(found)}for(let x of imgs)if(!ordered.includes(x))ordered.push(x);
+ let arr=[];for(let x of ordered){let blob=await x.async('blob');arr.push({name:x.name.split('/').pop(),blob,type:blob.type||'image/jpeg',size:blob.size,lastModified:0})}setPhotos(arr,file.name)}
+function filename(p){let m=clean($('model').value).toUpperCase(),a=$('yearStart').value.trim(),b=$('yearEnd').value.trim();if(!m||!/^\\d{4}$/.test(a)||!/^\\d{4}$/.test(b)||+a>+b)return '';let ext=(p.name.match(/\\.[^.]+$/)||['.jpg'])[0].toLowerCase();return clean(m+' '+a+(a===b?'':'-'+b))+ext}
+function unique(base,key){let used=new Set([...saved].filter(([k])=>k!==key).map(([,v])=>v.name.toLowerCase()));let n=1,c=base;while(used.has(c.toLowerCase())){let i=base.lastIndexOf('.');c=(i>0?base.slice(0,i):base)+'.'+n+++(i>0?base.slice(i):'')}return c}
+function current(){return photos[idx]}
+function render(){
+ let p=current();$('total').textContent=photos.length;$('savedCount').textContent=saved.size;$('skippedCount').textContent=skipped.size;$('pendingCount').textContent=Math.max(0,photos.length-saved.size-skipped.size);
+ $('progressBar').style.width=(photos.length?((saved.size+skipped.size)/photos.length*100):0)+'%';$('progressText').textContent=(saved.size+skipped.size)+' de '+photos.length+' revisadas';$('lotInfo').textContent=photos.length?(zipName||'Lote cargado'):'Sin lote cargado';
+ $('position').textContent='Fotografía '+(photos.length?idx+1:0)+' de '+photos.length;$('originalName').textContent=p?p.name:'Sin fotografía seleccionada';
+ if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;if(p){objectUrl=URL.createObjectURL(p.blob);$('preview').src=objectUrl}else $('preview').removeAttribute('src');
+ let rec=saved.get(p?.key);$('refs').value=rec?.refs||'';$('model').value=rec?.model||'';$('yearStart').value=rec?.a||'';$('yearEnd').value=rec?.b||'';$('notes').value=rec?.notes||'';$('filename').value=p?filename(p):'';
+ ['prev','next','skip','undoSkip','ocr','saveNext','saveOnly'].forEach(id=>$(id).disabled=!p);
+ $('prev').disabled=!p||idx===0;$('next').disabled=!p||idx===photos.length-1;$('undoSkip').disabled=!p||!skipped.has(p.key);
+ $('queue').innerHTML=photos.map((x,i)=>{let state=saved.has(x.key)?'<span class="ok">Guardada</span>':skipped.has(x.key)?'<span class="skip">Omitida</span>':'<span class="tag">Pendiente</span>';return `<div class="qitem ${i===idx?'active':''}" data-i="${i}"><span>${String(i+1).padStart(3,'0')} · ${esc(x.name)}</span>${state}</div>`}).join('');
+ $('queue').querySelectorAll('[data-i]').forEach(el=>el.onclick=async()=>{idx=+el.dataset.i;await persist();render()});
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function validate(){let p=current(),base=filename(p||{name:'x.jpg'});if(!p)return null;if(!base){say('Completa el modelo y los años correctamente.');return null}return {p,name:base,model:clean($('model').value).toUpperCase(),a:$('yearStart').value,b:$('yearEnd').value,refs:$('refs').value,notes:$('notes').value}}
+async function writeFile(handle,name,blob){let f=await handle.getFileHandle(name,{create:true}),w=await f.createWritable();await w.write(blob);await w.close()}
+async function saveRecord(){
+ let v=validate();if(!v)return false;let old=saved.get(v.p.key),name=old?.name||unique(v.name,v.p.key),direct=false;
+ if(dirHandle){try{let perm=await dirHandle.queryPermission({mode:'readwrite'});if(perm!=='granted')perm=await dirHandle.requestPermission({mode:'readwrite'});if(perm!=='granted')throw Error('Permiso de escritura no concedido');await writeFile(dirHandle,name,v.p.blob);direct=true}catch(e){say('No se pudo escribir en la carpeta. El registro queda respaldado localmente. '+e.message);dirHandle=null;updateFolderLabel()}}
+ saved.set(v.p.key,{...v,name,refs:v.refs,model:v.model,a:v.a,b:v.b,notes:v.notes,direct});skipped.delete(v.p.key);await persist();render();say(direct?'Guardada en '+name:'Respaldo local guardado: '+name+(dirHandle?'':' · reconecta la carpeta para copiarla'));return true
+}
+async function connectFolder(){if(!window.isSecureContext||!window.showDirectoryPicker)throw Error('Abre la aplicación desde su dirección HTTPS en Chrome o Edge.');let h=await window.showDirectoryPicker({mode:'readwrite'});let perm=await h.requestPermission({mode:'readwrite'});if(perm!=='granted')throw Error('Permiso de escritura denegado.');await persistHandle(h);dirHandle=h;updateFolderLabel();say('Destino guardado: '+h.name+'. Los archivos se escribirán directamente aquí.')}
+async function reconnect(){if(!dirHandle){await connectFolder();return}let p=await dirHandle.requestPermission({mode:'readwrite'});if(p!=='granted')throw Error('Chrome no concedió el permiso. Pulsa seleccionar carpeta destino para elegirla otra vez.');updateFolderLabel();say('Permiso reactivado para '+dirHandle.name)}
+async function move(n){idx=Math.max(0,Math.min(photos.length-1,n));await persist();render()}
+$('zipInput').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{say('Leyendo ZIP...');await importZip(f)}catch(x){say('Error importando ZIP: '+x.message)}};
+$('photosInput').onchange=e=>{let a=imageFiles(e.target.files).map(f=>({name:f.name,blob:f,type:f.type,size:f.size,lastModified:f.lastModified}));if(a.length)setPhotos(a,'Fotos seleccionadas')};
+$('restoreBtn').onclick=restore;
+$('pickFolder').onclick=()=>connectFolder().then(render).catch(e=>say('No se pudo conectar carpeta: '+e.message));
+$('reconnect').onclick=()=>reconnect().catch(e=>say('No se pudo reactivar el permiso: '+e.message));
+$('prev').onclick=()=>move(idx-1);$('next').onclick=()=>move(idx+1);
+$('skip').onclick=async()=>{let p=current();if(!p)return;skipped.add(p.key);await persist();await move(idx+1);say('Fotografía omitida. Puedes volver desde la lista.')};
+$('undoSkip').onclick=async()=>{let p=current();if(p){skipped.delete(p.key);await persist();render();say('Omisión retirada.')}};
+$('saveOnly').onclick=async()=>{try{await saveRecord()}catch(e){say('Error: '+e.message)}};
+$('saveNext').onclick=async()=>{try{if(await saveRecord())await move(idx+1)}catch(e){say('Error al guardar: '+e.message)}};
+$('model').oninput=$('yearStart').oninput=$('yearEnd').oninput=()=>{$('filename').value=filename(current()||{name:'x.jpg'})};
+$('ocr').onclick=async()=>{let p=current();if(!p)return;if(!window.Tesseract){say('OCR no disponible: revisa Internet.');return}try{say('Leyendo etiqueta con OCR...');let r=await Tesseract.recognize(p.blob,'eng');let t=r.data.text.trim();$('refs').value=[ $('refs').value,t].filter(Boolean).join('\n');say('OCR listo. Verifica los caracteres reconocidos.')}catch(e){say('Error OCR: '+e.message)}};
+$('exportCsv').onclick=()=>{let rows=[['Archivo original','Nombre guardado','Modelo','Año inicial','Año final','Referencias','Notas']];for(let [k,v] of saved)rows.push([photos.find(p=>p.key===k)?.name||'',v.name,v.model,v.a,v.b,v.refs,v.notes]);let csv='\\ufeff'+rows.map(r=>r.map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';')).join('\\r\\n');download(new Blob([csv],{type:'text/csv;charset=utf-8'}),'INVENTARIO_ECU.csv')};
+$('exportZip').onclick=async()=>{if(!window.JSZip)throw Error('JSZip no disponible');let z=new JSZip(),f=z.folder('FOTOS_CLASIFICADAS'),used=new Set(),rows=[['Archivo original','Nombre guardado','Modelo','Año inicial','Año final','Referencias','Notas']];for(let [k,v] of saved){let p=photos.find(x=>x.key===k);if(!p)continue;let name=v.name,n=1;while(used.has(name.toLowerCase())){let i=v.name.lastIndexOf('.');name=(i>0?v.name.slice(0,i):v.name)+'.'+n+++(i>0?v.name.slice(i):'')}used.add(name.toLowerCase());f.file(name,p.blob);rows.push([p.name,name,v.model,v.a,v.b,v.refs,v.notes])}let csv='\\ufeff'+rows.map(r=>r.map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';')).join('\\r\\n');f.file('INVENTARIO_ECU.csv',csv);let b=await z.generateAsync({type:'blob'});download(b,'ECU_FOTOS_CLASIFICADAS.zip')};
+function download(blob,name){let a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000)}
+$('clear').onclick=async()=>{if(!confirm('¿Borrar la sesión y sus registros locales? Esta acción no se puede deshacer.'))return;photos=[];saved.clear();skipped.clear();idx=0;await dbPut(KEY,null);render();say('Sesión local borrada.')};
+window.addEventListener('beforeunload',()=>{if(objectUrl)URL.revokeObjectURL(objectUrl)});
+restore();render();
+})();
+</script>
+</body></html>
