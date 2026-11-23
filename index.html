@@ -75,7 +75,7 @@ label{display:block;font-weight:650;font-size:13px;margin:12px 0 5px}.hint{font-
 const DB='ecu-inventory-v2',STORE='state',KEY='active',HANDLE='destination';
 let dbp,photos=[],idx=0,saved=new Map(),skipped=new Set(),dirHandle=null,objectUrl=null,zipName='';
 const $=id=>document.getElementById(id);
-const clean=s=>(s||'').trim().replace(/[<>:"/\\\\|?*\\x00-\\x1F]/g,' ').replace(/\\s+/g,' ').replace(/[. ]+$/,'');
+const clean=s=>(s||'').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g,' ').replace(/\s+/g,' ').replace(/[. ]+$/,'');
 const say=t=>$('status').textContent=t;
 function db(){if(!dbp)dbp=new Promise((res,rej)=>{let r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{r.result.createObjectStore(STORE)};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});return dbp}
 async function dbGet(k){let d=await db();return new Promise((res,rej)=>{let t=d.transaction(STORE,'readonly'),r=t.objectStore(STORE).get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
@@ -89,12 +89,29 @@ async function restore(){
 }
 function updateFolderLabel(){ $('folderStatus').textContent=dirHandle?'Carpeta recordada: '+dirHandle.name+' · verifica permiso con Reconectar':'Destino no seleccionado';}
 function fileKey(f,i){return f.name+'|'+f.size+'|'+f.lastModified+'|'+i}
-function imageFiles(files){return [...files].filter(f=>f.type.startsWith('image/')||/\\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name))}
+function imageFiles(files){return [...files].filter(f=>f.type.startsWith('image/')||/\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name))}
 function setPhotos(list,name){photos=list.map((p,i)=>({...p,key:p.key||fileKey(p.file||p,i)}));idx=0;saved.clear();skipped.clear();zipName=name||'';persist().then(()=>{render();say('Lote cargado y respaldado. '+photos.length+' fotografías.')}).catch(e=>say('No se pudo respaldar el lote: '+e.message))}
-async function importZip(file){if(!window.JSZip)throw Error('No se cargó JSZip. Comprueba Internet y recarga.');let z=await JSZip.loadAsync(file),entries=Object.values(z.files).filter(x=>!x.dir);let txt=entries.find(x=>/\\.txt$/i.test(x.name)&&/chat|_chat|whatsapp/i.test(x.name))||entries.find(x=>/\\.txt$/i.test(x.name));let order=[];if(txt){let t=await txt.async('string');let re=/([^\\r\\n]*?)([^\\r\\n]*\\.(?:jpe?g|png|webp|gif|bmp))\\s*\\(archivo adjunto\\)/gi,m;while((m=re.exec(t)))order.push(m[2].split('/').pop())}
- let imgs=entries.filter(x=>/\\.(jpe?g|png|webp|gif|bmp)$/i.test(x.name));let ordered=[];for(let n of order){let found=imgs.find(x=>x.name.endsWith('/'+n)||x.name===n);if(found&&!ordered.includes(found))ordered.push(found)}for(let x of imgs)if(!ordered.includes(x))ordered.push(x);
- let arr=[];for(let x of ordered){let blob=await x.async('blob');arr.push({name:x.name.split('/').pop(),blob,type:blob.type||'image/jpeg',size:blob.size,lastModified:0})}setPhotos(arr,file.name)}
-function filename(p){let m=clean($('model').value).toUpperCase(),a=$('yearStart').value.trim(),b=$('yearEnd').value.trim();if(!m||!/^\\d{4}$/.test(a)||!/^\\d{4}$/.test(b)||+a>+b)return '';let ext=(p.name.match(/\\.[^.]+$/)||['.jpg'])[0].toLowerCase();return clean(m+' '+a+(a===b?'':'-'+b))+ext}
+async function importZip(file){
+ if(!window.JSZip)throw Error('No se cargó JSZip. Comprueba Internet y recarga.');
+ let z=await JSZip.loadAsync(file),entries=Object.values(z.files).filter(x=>!x.dir);
+ let txt=entries.find(x=>/\.txt$/i.test(x.name)&&(/chat|_chat|whatsapp/i.test(x.name)))||entries.find(x=>/\.txt$/i.test(x.name));
+ let order=[];
+ if(txt){
+   let t=await txt.async('string');
+   let re=/<adjunto:\s*([^>]+)>/gi,m;
+   while((m=re.exec(t))){let n=m[1].trim().replace(/\\/g,'/').split('/').pop();if(n)order.push(n);}
+ }
+ let imgs=entries.filter(x=>/\.(jpe?g|png|webp|gif|bmp)$/i.test(x.name));
+ if(!imgs.length)throw Error('El ZIP se abrió, pero no se encontraron imágenes JPG, PNG, WEBP, GIF o BMP. No se modificó el lote actual.');
+ let ordered=[];
+ for(let n of order){let found=imgs.find(x=>x.name.split('/').pop()===n);if(found&&!ordered.includes(found))ordered.push(found);}
+ for(let x of imgs)if(!ordered.includes(x))ordered.push(x);
+ let arr=[];
+ for(let x of ordered){let blob=await x.async('blob');arr.push({name:x.name.split('/').pop(),blob,type:blob.type||'image/jpeg',size:blob.size,lastModified:0});}
+ if(!arr.length)throw Error('No se pudieron preparar las fotografías del ZIP. No se modificó el lote actual.');
+ setPhotos(arr,file.name);
+}
+function filename(p){let m=clean($('model').value).toUpperCase(),a=$('yearStart').value.trim(),b=$('yearEnd').value.trim();if(!m||!/^\d{4}$/.test(a)||!/^\d{4}$/.test(b)||+a>+b)return '';let ext=(p.name.match(/\.[^.]+$/)||['.jpg'])[0].toLowerCase();return clean(m+' '+a+(a===b?'':'-'+b))+ext}
 function unique(base,key){let used=new Set([...saved].filter(([k])=>k!==key).map(([,v])=>v.name.toLowerCase()));let n=1,c=base;while(used.has(c.toLowerCase())){let i=base.lastIndexOf('.');c=(i>0?base.slice(0,i):base)+'.'+n+++(i>0?base.slice(i):'')}return c}
 function current(){return photos[idx]}
 function render(){
@@ -131,8 +148,8 @@ $('saveOnly').onclick=async()=>{try{await saveRecord()}catch(e){say('Error: '+e.
 $('saveNext').onclick=async()=>{try{if(await saveRecord())await move(idx+1)}catch(e){say('Error al guardar: '+e.message)}};
 $('model').oninput=$('yearStart').oninput=$('yearEnd').oninput=()=>{$('filename').value=filename(current()||{name:'x.jpg'})};
 $('ocr').onclick=async()=>{let p=current();if(!p)return;if(!window.Tesseract){say('OCR no disponible: revisa Internet.');return}try{say('Leyendo etiqueta con OCR...');let r=await Tesseract.recognize(p.blob,'eng');let t=r.data.text.trim();$('refs').value=[ $('refs').value,t].filter(Boolean).join('\n');say('OCR listo. Verifica los caracteres reconocidos.')}catch(e){say('Error OCR: '+e.message)}};
-$('exportCsv').onclick=()=>{let rows=[['Archivo original','Nombre guardado','Modelo','Año inicial','Año final','Referencias','Notas']];for(let [k,v] of saved)rows.push([photos.find(p=>p.key===k)?.name||'',v.name,v.model,v.a,v.b,v.refs,v.notes]);let csv='\\ufeff'+rows.map(r=>r.map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';')).join('\\r\\n');download(new Blob([csv],{type:'text/csv;charset=utf-8'}),'INVENTARIO_ECU.csv')};
-$('exportZip').onclick=async()=>{if(!window.JSZip)throw Error('JSZip no disponible');let z=new JSZip(),f=z.folder('FOTOS_CLASIFICADAS'),used=new Set(),rows=[['Archivo original','Nombre guardado','Modelo','Año inicial','Año final','Referencias','Notas']];for(let [k,v] of saved){let p=photos.find(x=>x.key===k);if(!p)continue;let name=v.name,n=1;while(used.has(name.toLowerCase())){let i=v.name.lastIndexOf('.');name=(i>0?v.name.slice(0,i):v.name)+'.'+n+++(i>0?v.name.slice(i):'')}used.add(name.toLowerCase());f.file(name,p.blob);rows.push([p.name,name,v.model,v.a,v.b,v.refs,v.notes])}let csv='\\ufeff'+rows.map(r=>r.map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';')).join('\\r\\n');f.file('INVENTARIO_ECU.csv',csv);let b=await z.generateAsync({type:'blob'});download(b,'ECU_FOTOS_CLASIFICADAS.zip')};
+$('exportCsv').onclick=()=>{let rows=[['Archivo original','Nombre guardado','Modelo','Año inicial','Año final','Referencias','Notas']];for(let [k,v] of saved)rows.push([photos.find(p=>p.key===k)?.name||'',v.name,v.model,v.a,v.b,v.refs,v.notes]);let csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');download(new Blob([csv],{type:'text/csv;charset=utf-8'}),'INVENTARIO_ECU.csv')};
+$('exportZip').onclick=async()=>{if(!window.JSZip)throw Error('JSZip no disponible');let z=new JSZip(),f=z.folder('FOTOS_CLASIFICADAS'),used=new Set(),rows=[['Archivo original','Nombre guardado','Modelo','Año inicial','Año final','Referencias','Notas']];for(let [k,v] of saved){let p=photos.find(x=>x.key===k);if(!p)continue;let name=v.name,n=1;while(used.has(name.toLowerCase())){let i=v.name.lastIndexOf('.');name=(i>0?v.name.slice(0,i):v.name)+'.'+n+++(i>0?v.name.slice(i):'')}used.add(name.toLowerCase());f.file(name,p.blob);rows.push([p.name,name,v.model,v.a,v.b,v.refs,v.notes])}let csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(';')).join('\r\n');f.file('INVENTARIO_ECU.csv',csv);let b=await z.generateAsync({type:'blob'});download(b,'ECU_FOTOS_CLASIFICADAS.zip')};
 function download(blob,name){let a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000)}
 $('clear').onclick=async()=>{if(!confirm('¿Borrar la sesión y sus registros locales? Esta acción no se puede deshacer.'))return;photos=[];saved.clear();skipped.clear();idx=0;await dbPut(KEY,null);render();say('Sesión local borrada.')};
 window.addEventListener('beforeunload',()=>{if(objectUrl)URL.revokeObjectURL(objectUrl)});
